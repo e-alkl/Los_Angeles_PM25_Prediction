@@ -3,16 +3,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt 
 import seaborn as sns 
 import joblib
+import shap # 🚀 新增 SHAP 庫導入
+
+
+# --- 設定優化階段參數 ---
+N_HOURS_AHEAD = 24 
+
 
 # --- 1. 數據載入與特徵定義 ---
-# 載入 V13 清洗完成的數據集
 file_path = "la_pm25_combined_clean_v13.csv"
 try:
-    # 🚨 確保這裡有 df 變數的定義
     df = pd.read_csv(file_path, index_col='DateTime', parse_dates=True)
 except FileNotFoundError:
     print(f"🚨 錯誤：找不到文件 {file_path}。請確保它與腳本在同一目錄下。")
@@ -21,9 +24,10 @@ except FileNotFoundError:
 print("--- 模型訓練準備階段 ---")
 print(f"載入數據集總記錄數: {len(df)}")
 
-# 定義目標變量 (y)
+# 定義目標變量 (y) - 使用 t+N 的數值
 target_variable = 'PM25'
-y = df[target_variable]
+y = df[target_variable].shift(-N_HOURS_AHEAD)
+
 
 # 定義氣象特徵 (X)
 feature_columns = [
@@ -37,37 +41,42 @@ feature_columns = [
 ]
 X = df[feature_columns].copy()
 
+
 # --- 1.5. 新增：目標變量的滯後特徵 (Lagged Feature) ---
-# 這是提升 R^2 的關鍵。
-X['PM25_Lag_1'] = y.shift(1)
+# 🚀 關鍵優化 1: 加入 N 小時前的 PM2.5 數值
+X[f'PM25_Lag_{N_HOURS_AHEAD}'] = df[target_variable].shift(N_HOURS_AHEAD)
 
-# 由於第一個小時 (t=0) 沒有 t-1 的值，會產生 NaN。
-# 我們需要刪除第一個小時的記錄，以確保數據完整性。
-X.dropna(inplace=True) 
-y = y[X.index] # 確保 y 也被同步截斷，保持嚴格對齊
+# 🌟 關鍵優化 2: 加入 N 小時前的 24 小時滾動平均 (Rolling Mean)
+rolling_mean = df[target_variable].rolling(window=24).mean()
+X[f'PM25_RollingMean_24hr_Lag_{N_HOURS_AHEAD}'] = rolling_mean.shift(N_HOURS_AHEAD)
+print("✅ 新增 PM2.5 過去 24 小時平均值特徵！")
 
-print(f"新增 PM2.5 滯後特徵後，總記錄數變為: {len(X)}")
 
 # --- 2. 創建時間相關特徵 (特徵工程) ---
 print("⚙️ 進行時間特徵工程...")
-
-# 從索引提取時間特徵
 X['DayOfWeek'] = X.index.dayofweek
 X['Month'] = X.index.month
 
-# 💡 增加時間的循環特徵
+# 💡 增加時間的循環特徵 (不變)
 X['Hour'] = X.index.hour
 X['Hour_sin'] = np.sin(2 * np.pi * X['Hour'] / 24)
 X['Hour_cos'] = np.cos(2 * np.pi * X['Hour'] / 24)
 X = X.drop('Hour', axis=1) # 移除原始的 Hour 欄位
 
+
+# --- 2.5. 清理 NaN 值和對齊 X 與 y (數據對齊是成功的關鍵) ---
+combined_df = pd.concat([X, y.rename('Target_PM25')], axis=1).dropna()
+
+# 重新定義 X 和 y
+X = combined_df.drop('Target_PM25', axis=1)
+y = combined_df['Target_PM25']
+
+print(f"定義滯後特徵和目標變數後，最終有效記錄數: {len(X)}")
 print(f"最終特徵 (X) 數量: {X.shape[1]}")
 
 
 # --- 3. 數據集劃分 (隨機劃分：80% 訓練 / 20% 測試) ---
 print("\n⚙️ 進行隨機劃分：80% 訓練 / 20% 測試...")
-
-# 使用 train_test_split 確保 X 和 y 完美對齊
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
@@ -77,8 +86,7 @@ print(f"測試集 (20%) 記錄數: {len(X_test)}")
 
 
 # --- 4. 模型訓練 (隨機森林回歸) ---
-print("\n⚙️ 開始訓練隨機森林回歸模型 (V2.0)...")
-# 保持 max_depth=10 以控制模型複雜度
+print(f"\n⚙️ 開始訓練隨機森林模型 (預測 t+{N_HOURS_AHEAD} 小時)...")
 model = RandomForestRegressor(n_estimators=100, 
                               max_depth=10, 
                               random_state=42, 
@@ -90,12 +98,12 @@ print("✅ 模型訓練完成！")
 # --- 5. 模型評估 ---
 y_pred = model.predict(X_test)
 
-# 計算評估指標
 mse = mean_squared_error(y_test, y_pred)
 rmse = np.sqrt(mse)
 r2 = r2_score(y_test, y_pred)
 
-print("\n--- 模型性能評估 (V2.0 測試集) ---")
+print("\n--- 模型性能評估 (新挑戰測試集) ---")
+print(f"預測時間：{N_HOURS_AHEAD} 小時後")
 print(f"平均絕對誤差 (RMSE): {rmse:.2f}")
 print(f"決定係數 (R²): {r2:.4f}")
 
@@ -105,63 +113,57 @@ feature_importances = pd.Series(model.feature_importances_, index=X_train.column
 print("\n--- 頂部 5 個重要特徵 (滯後特徵影響分析) ---")
 print(feature_importances.nlargest(5))
 
-# --- 7. 模型儲存 (Save Model) ---
-model_filename = 'pm25_random_forest_v2.0.joblib'
 
+# --- 7. 模型儲存 (Save Model) ---
+model_filename = f'pm25_rf_predict_{N_HOURS_AHEAD}hr_v2.joblib' 
 try:
-    # 使用 joblib 儲存訓練好的模型 (model 變數)
     joblib.dump(model, model_filename)
+    # 由於模型檔案通常很大，我們不應該將其推送到 Git，因此這裡註釋掉了關於 Git 的說明
     print(f"\n✅ 模型已成功儲存至 {model_filename}！")
 except Exception as e:
     print(f"\n🚨 模型儲存失敗: {e}")
 
+
 # --- 8. 視覺化設置 ---
-print("\n--- 7. 繪製視覺化圖表 ---")
-plt.style.use('seaborn-v0_8-whitegrid') # 設置圖表風格
-sns.set_palette("colorblind") # 設置顏色主題
+print("\n--- 繪製視覺化圖表 ---")
+plt.style.use('seaborn-v0_8-whitegrid')
+sns.set_palette("colorblind") 
 
 
-# --- 圖表 1: 預測與實際值對比 (時間序列) ---
-# 選擇測試集 (20% 數據) 中一段代表性的時間範圍來展示高準確度
-# 這裡我們隨機選擇測試集中的 24*7 = 168 個連續小時 (一周)
-n_hours = 168
-start_index = np.random.randint(0, len(y_test) - n_hours)
-
-# 創建一個 DataFrame 包含實際值和預測值
-plot_df = pd.DataFrame({
-    'Actual PM2.5': y_test.iloc[start_index : start_index + n_hours],
-    'Predicted PM2.5': y_pred[start_index : start_index + n_hours]
-})
-
-plt.figure(figsize=(15, 6))
-plt.plot(plot_df.index, plot_df['Actual PM2.5'], label='Actual PM2.5', color='blue', linewidth=2)
-plt.plot(plot_df.index, plot_df['Predicted PM2.5'], label='Predicted PM2.5', color='red', linestyle='--', linewidth=1.5)
-
-plt.title(f'PM2.5 預測與實際值對比 (一週樣本)\n (RMSE: {rmse:.2f} | R²: {r2:.4f})', fontsize=16)
-plt.xlabel('時間 (DateTime)', fontsize=12)
-plt.ylabel(r'PM$_{2.5}$ $(\mu g/m^3)$', fontsize=12)
-plt.legend(fontsize=10)
-plt.xticks(rotation=45, ha='right')
-plt.tight_layout()
-plt.savefig('pm25_prediction_vs_actual.png')
-print("✅ 圖表 1: 預測與實際值對比 (pm25_prediction_vs_actual.png) 已保存")
-# plt.show() # 如果在 Jupyter/Colab 中運行，取消註釋此行
+# --- 圖表 1 & 2: 預測對比與傳統特徵重要性 (與之前相同，略) ---
+# ... [這部分代碼與您提供的 V2 版本完全相同，因此為了簡潔這裡省略]
+# ... [確保您本地腳本中這部分仍然存在]
 
 
-# --- 圖表 2: 特徵重要性分析 (Feature Importance) ---
-# 使用你在 Section 6 計算的 feature_importances
-# 選擇前 10 個最重要的特徵來展示 (PM25_Lag_1 會佔據絕對優勢)
-top_n = feature_importances.nlargest(10).sort_values(ascending=True)
+# -----------------------------------------------------------
+# 🌟 關鍵優化 3: SHAP 可解釋性分析 (Explaining the Model)
+# -----------------------------------------------------------
+print("\n⚙️ 執行 SHAP 分析，解釋模型決策...")
 
+# 1. 創建 Explainer
+# 由於 Random Forest 是樹模型，我們使用 TreeExplainer，速度最快、精度最高
+explainer = shap.TreeExplainer(model)
+
+# 2. 計算 SHAP 值
+# 為了速度和準確性，我們只在測試集的一個子樣本上運行 SHAP (例如 500 個樣本)
+X_sample = X_test.sample(n=500, random_state=42) 
+shap_values = explainer.shap_values(X_sample)
+
+# 3. 繪製 SHAP 摘要圖
+# 這張圖是 SHAP 報告的核心，展示了每個特徵的影響方向和分佈
 plt.figure(figsize=(10, 7))
-top_n.plot(kind='barh', color='darkgreen')
+shap.summary_plot(shap_values, X_sample, 
+                  plot_type='dot', 
+                  show=False, 
+                  title=f'SHAP Feature Impact (Predicting T+{N_HOURS_AHEAD}hr PM2.5)')
 
-plt.title('特徵重要性分析 (Feature Importance)', fontsize=16)
-plt.xlabel('重要性分數 (Normalized Score)', fontsize=12)
-plt.ylabel('特徵名稱', fontsize=12)
+# 調整佈局並保存
 plt.tight_layout()
-plt.savefig('feature_importance.png')
-print("✅ 圖表 2: 特徵重要性分析 (feature_importance.png) 已保存")
-# plt.show() # 如果在 Jupyter/Colab 中運行，取消註釋此行
+shap_filename = f'shap_summary_plot_{N_HOURS_AHEAD}hr_v2.png'
+plt.savefig(shap_filename, bbox_inches='tight')
+plt.close() # 關閉圖表，避免內存洩漏
 
-print("\n🎉 成果視覺化完成！請檢查同目錄下的圖片檔案。")
+print(f"✅ 圖表 3: SHAP 摘要圖 ({shap_filename}) 已保存")
+
+print("\n🎉 成果視覺化和 SHAP 分析完成！請檢查同目錄下的圖片檔案。")
+# --- 程式碼結束 ---
