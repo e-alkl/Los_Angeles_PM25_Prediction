@@ -1,50 +1,92 @@
-# 🏙️ Los Angeles PM2.5 Hourly Prediction (Random Forest Regression)
+Los Angeles PM2.5 Concentration 24-Hour Prediction Model (XGBoost Optimized)
+Key Highlights
+This project utilizes an XGBoost regressor model, integrating meteorological data and time-series features to achieve accurate prediction of PM 
+2.5
+​
+  concentrations 24 hours in advance for the Los Angeles area.
 
-## Project Overview
+Core Achievement: Model accuracy was significantly improved by switching the loss function, reducing the Root Mean Squared Error (RMSE) from 5.69μg/m 
+3
+  to a remarkable 4.50μg/m 
+3
+ . This represents an over 21% improvement in predictive accuracy.
 
-This project focuses on **predicting the next hour's $\text{PM}_{2.5}$ concentration** in Los Angeles, California, using a combination of historical air quality data, time-series features, and localized meteorological conditions.
+Physical Interpretability: The model shifted its focus from simple historical PM 
+2.5
+​
+  inertia to Hourly Dew Point Temperature as its most important predictor, correctly capturing the physics of atmospheric stability and pollutant accumulation.
 
-The goal was to develop a robust machine learning model capable of capturing the complex, cyclical, and lagged dependencies of $\text{PM}_{2.5}$ concentrations.
+Bias Correction: Successfully eliminated the systematic overestimation bias that the initial model exhibited during low PM 
+2.5
+​
+  concentration periods (below 5μg/m 
+3
+ ).
 
-## Key Results & Performance
+⚙️ Model and Technology Stack (Stack)
+Model Architecture: XGBoost Regressor
 
-By leveraging detailed feature engineering, particularly focusing on the previous hour's $\text{PM}_{2.5}$ reading and time-based cyclical features, the model achieved exceptional performance on this short-term prediction task.
+Optimization Strategy: Switched objective to reg:absoluteerror (MAE) and fine-tuned hyperparameters (n_estimators=200,max_depth=7).
 
-| Metric | Result |
-| :--- | :--- |
-| **Model** | Random Forest Regressor |
-| **Coefficient of Determination ($\text{R}^2$)** | **0.9868** |
-| **Root Mean Squared Error ($\text{RMSE}$)** | 0.34 $\mu g/m^3$ |
+Key Libraries: Pandas, NumPy, Scikit-learn, XGBoost, Matplotlib, SHAP
 
-This result confirms the model's high accuracy in predicting very short-term (1-hour ahead) $\text{PM}_{2.5}$ fluctuations.
+Language: Python
 
-## Technology Stack
+Data and Feature Engineering
+The model was trained on historical data from early 2019 through the end of 2023 and tested on data from 2024.
 
-* **Language:** Python
-* **Data Analysis:** Pandas, NumPy
-* **Machine Learning:** Scikit-learn (`RandomForestRegressor`)
-* **Visualization:** Matplotlib, Seaborn
+Feature Type	Example Feature	Description
+Pollutant Lag	PM25_Lag_24	PM 
+2.5
+​
+  concentration from 24 hours prior.
+Core Meteorology	HourlyDewPointTemperature	The most critical feature in the optimized model, indicating moisture content and atmospheric stability.
+Atmospheric Stability	HourlyStationPressure	Suggests high-pressure ridges or inversion conditions, critical for trapping pollutants.
+Periodicity	Month, Hour_sin/cos	Captures seasonal (e.g., winter pollution) and diurnal (hourly) trends.
 
-## Feature Engineering Highlights
+Final Results and Analysis (Results)
+1. Performance Metric Comparison (2024 Test Set)
+Model Version	Loss Function	RMSE (μg/m 
+3
+ )	R²
+Initial Version	MSE	5.69	−0.87
+Final Optimized	MAE	4.50	−0.17
+2. Model Interpretability (SHAP Analysis)
+The plot below illustrates how Dew Point Temperature influences the PM 
+2.5
+​
+  prediction: higher dew point leads to a higher predicted PM 
+2.5
+​
+  due to increased atmospheric moisture and stability.
 
-The high performance was largely attributed to identifying and leveraging key features:
+3. Prediction Curve (Optimized Model)
+The curve shows that the optimized model's predictions (red dashed line) align very closely with the true values (blue solid line), successfully eliminating the over-prediction bias in low-concentration periods.
 
-1.  **Lagged $\text{PM}_{2.5}$ Feature:** The most critical input was the $\text{PM}_{2.5}$ concentration from the immediate **previous hour ($\text{PM25\_Lag\_1}$)**, which showed over $99\%$ feature importance, demonstrating the strong temporal correlation in air quality.
-2.  **Cyclical Time Features:** Sinusoidal and Cosine transformations were applied to the **Hour of Day** to enable the model to capture the daily, cyclical pattern of pollution (e.g., morning and evening traffic peaks).
-3.  **Meteorological Inputs:** Features like `HourlyDryBulbTemperature`, `HourlyWindSpeed`, and `HourlyAtmosphericPressure` were incorporated to account for environmental stability and dispersion.
+How to Run (Getting Started)
+1. Data and Model Acquisition
+Due to file size limits, data and the final model file are excluded via .gitignore. To reproduce the results, you need to:
 
-## Visualizations
+Obtain the raw CSV data file (consistent with the format expected in pm25_model_train.py).
 
-The project includes key visualizations illustrating the model's accuracy and feature contribution:
+Run the pm25_model_train.py script to train the model and generate the required pm25_xgb_optimized_predict_24hr_2019_2023_train.joblib file.
 
-* **Prediction vs. Actual Plot:** (See `pm25_prediction_vs_actual.png`) A plot showing the near-perfect alignment between predicted and actual $\text{PM}_{2.5}$ values.
-* **Feature Importance:** (See `feature_importance.png`) A chart confirming the dominant role of the lagged $\text{PM}_{2.5}$ feature.
+2. Installation
+Install all necessary Python libraries in your environment:
 
-## Future Work & Optimization
+Bash
 
-The current model excels at short-term prediction. To increase the project's complexity and practical value, future work will focus on the following:
+pip install pandas numpy xgboost scikit-learn matplotlib shap joblib
+3. Running Analysis and Prediction
+Execute the relevant Python scripts:
 
-1.  **Deeper Prediction Challenge:** Re-engineering the target variable to predict **6-hour** and **24-hour** ahead $\text{PM}_{2.5}$ concentrations. This will force the model to rely less on the highly correlated lagged feature and more on meteorological and time-based inputs.
-2.  **Model Robustness:** Implementing **Time Series Cross-Validation** to rigorously test the model's performance across different time periods.
-3.  **Explainability Analysis ($\text{SHAP}$):** Using $\text{SHAP}$ (SHapley Additive exPlanations) values to interpret model decisions, especially to understand which meteorological factors drive predictions during periods of high pollution.
-4.  **Wind Direction Encoding:** Correctly encoding the cyclical nature of wind direction using $\text{sin/cos}$ transformations for improved accuracy.
+Bash
+
+# To train/retrain the final optimized model
+python pm25_model_train.py
+
+# To generate the prediction curve plot (requires updating MODEL_FILENAME in the script)
+python pm25_plot_results.py
+
+# To generate the SHAP analysis plots
+python pm25_shap_plot.py
