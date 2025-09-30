@@ -25,7 +25,7 @@ Bias Correction: Successfully eliminated the systematic overestimation bias that
 3
  ).
 
-⚙️ Model and Technology Stack (Stack)
+Model and Technology Stack (Stack)
 Model Architecture: XGBoost Regressor
 
 Optimization Strategy: Switched objective to reg:absoluteerror (MAE) and fine-tuned hyperparameters (n_estimators=200,max_depth=7).
