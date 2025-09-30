@@ -16,7 +16,7 @@ Core Achievement: Model accuracy was significantly improved by switching the los
 Physical Interpretability: The model shifted its focus from simple historical PM 
 2.5
 ​
-  inertia to Hourly Dew Point Temperature as its most important predictor, correctly capturing the physics of atmospheric stability and pollutant accumulation.
+   inertia to Hourly Dew Point Temperature as its most important predictor, correctly capturing the physics of atmospheric stability and pollutant accumulation.
 
 Bias Correction: Successfully eliminated the systematic overestimation bias that the initial model exhibited during low PM 
 2.5
