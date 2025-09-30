@@ -205,3 +205,17 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+# 原始數據 (不應上傳)
+*.csv
+
+# 中間/最終數據集 (檔案太大，不應上傳)
+la_pm25_combined_clean_v*.csv
+la_pm25_feature_set.csv
+la_pm25_combined_clean.csv
+
+# 模型檔案 (檔案太大，不應上傳)
+*.joblib
+
+# VS Code 暫存/緩存 (常見忽略項目)
+.vscode/
+__pycache__/
